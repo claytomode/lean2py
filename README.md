@@ -65,6 +65,14 @@ Exported functions that use only **primitive** types (`UInt32`, `Float`, etc.) g
 1. **Serialization boundary:** Export functions that take/return `String` or `ByteArray`. In Lean, decode (e.g. JSON) into your types, compute, then encode back. Python sends/receives strings; no lean_object* on the boundary.
 2. **Future:** A proper FFI layer could wrap Lean’s runtime and expose helpers to build/decode `lean_object*` (lists, options, etc.); that’s not implemented yet.
 
+## Examples
+
+- **`examples/Add.lean`** — Primitives: `(UInt32, UInt32) -> UInt32` (add, mul).
+- **`examples/ArraySum.lean`** — Array in, scalar out: pass a Python list, get a sum.
+- **`examples/MergeSort.lean`** — Array in, array out: `mergesort([3,1,4,1,5])` → `[1,1,3,4,5]`.
+
+Build and run: `lean2py examples/MergeSort.lean -o . --bindings-name merge_sort`, then `import merge_sort; merge_sort.mergesort([3, 1, 4, 1, 5, 9, 2, 6])`.
+
 ## Project layout
 
 - `lean2py/lean2py/` — Parser (`@[export]`), Lake build, ctypes bindings generator, CLI.

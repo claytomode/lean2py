@@ -58,6 +58,11 @@ def generate_python_bindings(
             lines.append(f"            os.add_dll_directory({repr(d)})")
     lines.extend([
         "        _lib = ctypes.CDLL(_lib_path)",
+        "        _init = getattr(_lib, \"initialize_lean2py__export_LeanExport\", None)",
+        "        if _init is not None:",
+        "            _init.argtypes = [ctypes.c_uint8]",
+        "            _init.restype = ctypes.c_void_p",
+        "            _init(0)",
         "    return _lib",
         "",
         "_lean_bin_dir = os.environ.get(\"LEAN2PY_LEAN_BIN\", " + lean_bin + ") or None",
@@ -72,17 +77,17 @@ def generate_python_bindings(
         c_symbol = e.c_symbol
         safe_py = e.lean_name if e.lean_name.isidentifier() else c_symbol.replace("-", "_")
         names_for_all.append(safe_py)
-        # If single arg is a list of ints, use array FFI: (Array UInt32) -> UInt64
+        # If single arg is a list of ints, use array FFI: (Array UInt32) -> scalar or array
         lines.extend([
             f"def {safe_py}(*args, **kwargs):",
-            f'    """Call Lean export {c_symbol}. Pass a list of ints for (Array UInt32) -> scalar."""',
+            f'    """Call Lean export {c_symbol}. Pass a list of ints for (Array UInt32) -> scalar or array."""',
             "    _lib = _get_lib()",
             "    if _lean_ffi is not None and len(args) == 1 and not kwargs:",
             "        a = args[0]",
-            "        if isinstance(a, (list, tuple)) and len(a) > 0 and all(isinstance(x, int) for x in a):",
+            "        if isinstance(a, (list, tuple)) and all(isinstance(x, int) for x in a):",
             "            try:",
-            f"                return _lean_ffi.call_array_u32_u64(_lib, None, {repr(c_symbol)}, list(a), _lean_bin_dir)",
-            "            except (AttributeError, NotImplementedError, RuntimeError):",
+            f"                return _lean_ffi.call_array_u32_flexible(_lib, None, {repr(c_symbol)}, list(a), _lean_bin_dir)",
+            "            except (AttributeError, NotImplementedError, RuntimeError, ValueError):",
             "                pass",
             f"    f = getattr(_lib, {repr(c_symbol)}, None)",
             "    if f is None:",

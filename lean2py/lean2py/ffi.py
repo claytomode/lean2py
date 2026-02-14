@@ -157,6 +157,97 @@ def call_array_u32_u64(
     return _unbox_u64(rt, result)
 
 
+def _read_lean_array_u32(rt: ctypes.CDLL, ptr: ctypes.c_void_p) -> list[int]:
+    """Read a Lean Array UInt32 at ptr into a Python list. Decrefs the array."""
+    if not ptr:
+        return []
+    addr = ptr.value
+    # Header: tag at offset 7 (lean_object m_rc, m_cs_sz, m_other, m_tag)
+    tag = (ctypes.c_uint8).from_address(addr + 7).value
+    if tag != LEAN_ARRAY_TAG:
+        dec = getattr(rt, "lean_dec_ref_cold", None)
+        if dec is not None:
+            dec.argtypes = [ctypes.c_void_p]
+            dec.restype = None
+            dec(ptr)
+        raise ValueError(f"Expected Lean array (tag 246), got tag {tag}")
+    m_size = int.from_bytes((ctypes.c_uint8 * 8).from_address(addr + 8)[:], "little")
+    out: list[int] = []
+    for i in range(m_size):
+        slot_addr = addr + LEAN_ARRAY_HEADER_SIZE + i * 8
+        val = int.from_bytes((ctypes.c_uint8 * 8).from_address(slot_addr)[:], "little")
+        if (val & 1) == 1:
+            out.append((val >> 1) & 0xFFFFFFFF)
+        else:
+            # Boxed UInt32 - skip for now
+            out.append(0)
+    dec = getattr(rt, "lean_dec_ref_cold", None)
+    if dec is not None:
+        dec.argtypes = [ctypes.c_void_p]
+        dec.restype = None
+        dec(ptr)
+    return out
+
+
+def call_array_u32_array_u32(
+    lib: ctypes.CDLL,
+    rt: ctypes.CDLL | None,
+    symbol: str,
+    py_list: list[int],
+    lean_bin_dir: str | Path | None,
+) -> list[int]:
+    """Call (Array UInt32) -> Array UInt32; returns Python list."""
+    if rt is None:
+        rt = _get_runtime_lib(lean_bin_dir)
+    if rt is None:
+        raise RuntimeError(
+            "Lean runtime not found; set LEAN2PY_LEAN_BIN or ensure Lean bin is on PATH"
+        )
+    arr_ptr = _array_u32_to_lean(rt, py_list)
+    func = getattr(lib, symbol, None)
+    if func is None:
+        raise AttributeError(f"Export not found: {symbol}")
+    func.argtypes = [ctypes.c_void_p]
+    func.restype = ctypes.c_void_p
+    result = func(arr_ptr)
+    return _read_lean_array_u32(rt, result)
+
+
+def call_array_u32_flexible(
+    lib: ctypes.CDLL,
+    rt: ctypes.CDLL | None,
+    symbol: str,
+    py_list: list[int],
+    lean_bin_dir: str | Path | None,
+) -> int | list[int]:
+    """
+    Call a Lean export (Array UInt32) -> _ with a Python list.
+    If the result is an array, returns list[int]; otherwise unboxes to int.
+    """
+    if rt is None:
+        rt = _get_runtime_lib(lean_bin_dir)
+    if rt is None:
+        raise RuntimeError(
+            "Lean runtime not found; set LEAN2PY_LEAN_BIN or ensure Lean bin is on PATH"
+        )
+    arr_ptr = _array_u32_to_lean(rt, py_list)
+    func = getattr(lib, symbol, None)
+    if func is None:
+        raise AttributeError(f"Export not found: {symbol}")
+    func.argtypes = [ctypes.c_void_p]
+    func.restype = ctypes.c_void_p
+    result = func(arr_ptr)
+    val = getattr(result, "value", result) or 0
+    # Tagged scalar (low bit 1) -> return int
+    if val & 1:
+        return _unbox_u64(rt, result)
+    # Pointer -> assume array
+    try:
+        return _read_lean_array_u32(rt, ctypes.c_void_p(val) if not isinstance(result, ctypes.c_void_p) else result)
+    except ValueError:
+        return _unbox_u64(rt, result)
+
+
 def call_array_u32_u32(
     lib: ctypes.CDLL,
     rt: ctypes.CDLL | None,
