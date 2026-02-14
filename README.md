@@ -58,12 +58,21 @@ We run `lake build` and the shared facet so Lake produces a `.so`/`.dll`/`.dylib
 - **Single file:** Use `--mathlib` so the generated lakefile adds `require mathlib from git "..."`. The first build will fetch and compile Mathlib (slow); later builds are incremental.
 - **Existing project:** Point lean2py at the **directory** that contains your `lakefile.lean` (with Mathlib or any deps you already use). We run `lake build` there and collect all `@[export ...]` defs.
 
-## Complex types (List, Option, custom types)
+## Array UInt32 (list in / scalar or list out)
 
-Exported functions that use only **primitive** types (`UInt32`, `Float`, etc.) get clean C signatures and work with the generated bindings. For **complex** types (e.g. `List α`, `Option β`), Lean compiles them to `lean_object*`; calling from Python would require marshalling between Python objects and Lean’s heap. Two practical options:
+Exports with type **(Array UInt32) → _ ** are supported from Python by passing a **list of integers**:
 
-1. **Serialization boundary:** Export functions that take/return `String` or `ByteArray`. In Lean, decode (e.g. JSON) into your types, compute, then encode back. Python sends/receives strings; no lean_object* on the boundary.
-2. **Future:** A proper FFI layer could wrap Lean’s runtime and expose helpers to build/decode `lean_object*` (lists, options, etc.); that’s not implemented yet.
+- **(Array UInt32) → UInt64** (or other scalar): pass a list, get an int (e.g. `sum_arr([1,2,3])` → `6`).
+- **(Array UInt32) → Array UInt32**: pass a list, get a list (e.g. `mergesort([3,1,4,1,5])` → `[1,1,3,4,5]`).
+
+The generated bindings use the Lean runtime to build the array and, when the result is an array, to read it back. On Windows you may need the Lean toolchain on `PATH` or set `LEAN2PY_LEAN_BIN` to the Lean `bin` directory so the runtime DLLs are found.
+
+## Other complex types (List, Option, custom)
+
+Exported functions that use only **primitive** types (`UInt32`, `Float`, etc.) or **Array UInt32** (see above) work with the generated bindings. For other **complex** types (e.g. `List α`, `Option β`), Lean compiles them to `lean_object*`; calling from Python would require marshalling between Python objects and Lean’s heap. Two options:
+
+1. **Serialization boundary:** Export functions that take/return `String` or `ByteArray`. In Lean, decode (e.g. JSON) into your types, compute, then encode back. Python sends/receives strings.
+2. **Future:** A full FFI for arbitrary `lean_object*` (lists, options, etc.) is not implemented yet.
 
 ## Examples
 
