@@ -1,6 +1,18 @@
 # lean2py
 
-**Lean 4 -> compiled C -> Python bindings.** You write Lean, we build it and generate a Python module you can import.
+**Lean 4 → compiled C → Python bindings.** Write Lean 4, build with Lake, get a Python module you can import and call.
+
+## Install
+
+From the repo (development):
+
+```bash
+git clone https://github.com/claytomode/lean2py.git
+cd lean2py
+uv sync
+```
+
+The `lean2py` CLI is available after `uv sync` (or use `uv run lean2py`).
 
 ## Quick start
 
@@ -13,10 +25,10 @@
 2. Run the pipeline (builds with `lake`, generates Python bindings):
 
    ```bash
-   uv run python -m bigo_gen.lean2py.cli path/to/MyLib.lean -o .
+   lean2py path/to/MyLib.lean -o .
    ```
 
-   Or after `uv sync`: `lean2py path/to/MyLib.lean -o .`
+   Or: `uv run lean2py path/to/MyLib.lean -o .`
 
 3. Use the generated module:
 
@@ -57,3 +69,7 @@ Exported functions that use only **primitive** types (`UInt32`, `Float`, etc.) g
 
 - `bigo_gen/lean2py/` — Parser (`@[export]`), Lake build, ctypes bindings generator, CLI.
 - `examples/` — Sample Lean files with `@[export]` defs.
+
+## License
+
+See repository.
