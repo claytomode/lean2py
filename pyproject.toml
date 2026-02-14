@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
-lean2py = "bigo_gen.lean2py.cli:main"
+lean2py = "lean2py.lean2py.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0"]

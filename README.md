@@ -67,7 +67,7 @@ Exported functions that use only **primitive** types (`UInt32`, `Float`, etc.) g
 
 ## Project layout
 
-- `bigo_gen/lean2py/` — Parser (`@[export]`), Lake build, ctypes bindings generator, CLI.
+- `lean2py/lean2py/` — Parser (`@[export]`), Lake build, ctypes bindings generator, CLI.
 - `examples/` — Sample Lean files with `@[export]` defs.
 
 ## License
