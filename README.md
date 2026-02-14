@@ -1,6 +1,6 @@
-# BigO-Gen
+# lean2py
 
-**Lean 4 → compiled C → Python bindings.** You write Lean, we build it and generate a Python module you can import.
+**Lean 4 -> compiled C -> Python bindings.** You write Lean, we build it and generate a Python module you can import.
 
 ## Quick start
 
