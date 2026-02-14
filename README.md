@@ -1,6 +1,6 @@
 # lean2py
 
-**Lean 4 → compiled C → Python bindings.** Write Lean 4, build with Lake, get a Python module you can import and call.
+**Lean 4 -> compiled C -> Python bindings.** Write Lean 4, build with Lake, get a Python module you can import and call.
 
 ## Install
 
