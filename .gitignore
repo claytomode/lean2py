@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv/
+
+# lean2py
+.lean2py_build/
+lean_export.py
+add.py
+array_sum.py
+libLeanExport.dll
+*.so
+*.dylib
+
+# Local / env
+.env
+digest.txt
+.adk/
