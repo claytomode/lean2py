@@ -14,6 +14,12 @@ uv sync
 
 The `lean2py` CLI is available after `uv sync` (or use `uv run lean2py`).
 
+### Lean on PATH (Windows)
+
+- **Cursor / VS Code:** This repo includes [`.vscode/settings.json`](.vscode/settings.json), which prepends `%USERPROFILE%\.elan\bin` to the integrated terminal `PATH` so `lean` / `lake` work after [elan](https://github.com/leanprover/elan) is installed.
+- **Plain PowerShell:** run [`scripts/with-lean.ps1`](scripts/with-lean.ps1) before commands, e.g. `.\scripts\with-lean.ps1 uv run lean2py examples\Add.lean -o .`
+- **Check toolchain:** `uv run lean2py doctor` prints whether `lean` and `lake` are found and their versions.
+
 ## Quick start
 
 1. Write Lean 4 code and mark exports with `@[export c_name]` (identifier, not string):
@@ -38,6 +44,16 @@ The `lean2py` CLI is available after `uv sync` (or use `uv run lean2py`).
    ```
 
    Set `LEAN2PY_LIB` to the path of the shared library (`.so` / `.dll` / `.dylib`) if it’s not in the default location.
+
+## Python API and CLI
+
+**Library:** `from lean2py.lean2py import run, run_detailed, RunResult`. `run(...)` returns `(lib_path, py_path)` and on failure `(None, None)`. Pass `strict=True` to raise `Lean2PyError` subclasses instead, or call `run_detailed(...)` and inspect `RunResult` (including `lake_build` logs on Lake failure) then `raise_for_status()`.
+
+**CLI exit codes:** `0` success; `2` invalid input (missing file, not a `.lean` file, no lakefile, etc.); `3` Lake build failed; `4` no `@[export]` definitions found; `1` other errors (e.g. conflicting flags).
+
+**Flags:** `--lib-name` (Lake lean_lib name, default `LeanExport`), `-v` / `--verbose` (print lake stdout/stderr on failure), `-q` / `--quiet` (suppress success lines), `--strict` (raise on failure for debugging).
+
+**Environment (optional):** `LEAN2PY_LAKE_TIMEOUT` (seconds, default `300`), `LEAN2PY_LEANC_TIMEOUT` (default `120`), `LEAN2PY_MAX_ARRAY_LEN` (cap for list → `Array UInt32` marshalling, default `16777216`).
 
 ## Requirements
 

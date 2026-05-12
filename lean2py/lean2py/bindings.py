@@ -14,6 +14,7 @@ def generate_python_bindings(
     module_doc: str = "",
     extra_dll_dirs: list[str] | None = None,
     lean_bin_dir: str | None = None,
+    lean_lib_module: str = "LeanExport",
 ) -> str:
     """
     Write a Python module that loads the shared lib and exposes exported symbols.
@@ -23,9 +24,11 @@ def generate_python_bindings(
     output_path: where to write the .py file
     extra_dll_dirs: on Windows, add these to the DLL search path (e.g. Lean toolchain bin).
     lean_bin_dir: path to Lean toolchain bin (for array FFI); can be first extra_dll_dir.
+    lean_lib_module: Lake lean_lib name (used to locate optional Lean init symbol).
     """
     lib_path = str(lib_path).replace("\\", "/")
     lean_bin = repr(lean_bin_dir or "")
+    init_sym = f"initialize_lean2py__export_{lean_lib_module}"
     lines = [
         '"""',
         "Python bindings for Lean 4 compiled library.",
@@ -35,66 +38,71 @@ def generate_python_bindings(
         "",
         "import ctypes",
         "import os",
+        "import threading",
         "",
         "_lib_path = os.environ.get(",
         '    "LEAN2PY_LIB",',
-        f'    {repr(lib_path)}',
+        f"    {repr(lib_path)}",
         ")",
         "_lib = None",
+        "_lib_lock = threading.Lock()",
         "",
         "def _get_lib():",
         "    global _lib",
-        "    if _lib is None:",
-        "        if not os.path.isfile(_lib_path):",
-        "            raise FileNotFoundError(",
-        "                f\"Lean shared library not found at {_lib_path!r}. \"",
-        "                \"Build it with: uv run lean2py <file.lean> -o <dir> (requires Lean 4 + lake), \"",
-        "                \"or set LEAN2PY_LIB to the path of your .dll/.so/.dylib.\"",
-        "            )",
+        "    with _lib_lock:",
+        "        if _lib is None:",
+        "            if not os.path.isfile(_lib_path):",
+        "                raise FileNotFoundError(",
+        "                    f\"Lean shared library not found at {_lib_path!r}. \"",
+        '                    "Build with: uv run lean2py <file.lean> -o <dir> "',
+        '                    "(needs Lean 4 + lake), or set LEAN2PY_LIB to your .dll/.so/.dylib."',
+        "                )",
     ]
     if extra_dll_dirs and sys.platform == "win32":
-        lines.append("        if hasattr(os, 'add_dll_directory'):")
+        lines.append("            if hasattr(os, 'add_dll_directory'):")
         for d in extra_dll_dirs:
-            lines.append(f"            os.add_dll_directory({repr(d)})")
-    lines.extend([
-        "        _lib = ctypes.CDLL(_lib_path)",
-        "        _init = getattr(_lib, \"initialize_lean2py__export_LeanExport\", None)",
-        "        if _init is not None:",
-        "            _init.argtypes = [ctypes.c_uint8]",
-        "            _init.restype = ctypes.c_void_p",
-        "            _init(0)",
-        "    return _lib",
-        "",
-        "_lean_bin_dir = os.environ.get(\"LEAN2PY_LEAN_BIN\", " + lean_bin + ") or None",
-        "try:",
-        "    from lean2py.lean2py import ffi as _lean_ffi",
-        "except ImportError:",
-        "    _lean_ffi = None",
-        "",
-    ])
+            lines.append(f"                os.add_dll_directory({repr(d)})")
+    lines.extend(
+        [
+            "            _lib = ctypes.CDLL(_lib_path)",
+            f"            _init = getattr(_lib, {repr(init_sym)}, None)",
+            "            if _init is not None:",
+            "                _init.argtypes = [ctypes.c_uint8]",
+            "                _init.restype = ctypes.c_void_p",
+            "                _init(0)",
+            "        return _lib",
+            "",
+            "_lean_bin_dir = os.environ.get(\"LEAN2PY_LEAN_BIN\", " + lean_bin + ") or None",
+            "try:",
+            "    from lean2py.lean2py import ffi as _lean_ffi",
+            "except ImportError:",
+            "    _lean_ffi = None",
+            "",
+        ]
+    )
     names_for_all: list[str] = []
     for e in exports:
         c_symbol = e.c_symbol
         safe_py = e.lean_name if e.lean_name.isidentifier() else c_symbol.replace("-", "_")
         names_for_all.append(safe_py)
-        # If single arg is a list of ints, use array FFI: (Array UInt32) -> scalar or array
-        lines.extend([
-            f"def {safe_py}(*args, **kwargs):",
-            f'    """Call Lean export {c_symbol}. Pass a list of ints for (Array UInt32) -> scalar or array."""',
-            "    _lib = _get_lib()",
-            "    if _lean_ffi is not None and len(args) == 1 and not kwargs:",
-            "        a = args[0]",
-            "        if isinstance(a, (list, tuple)) and all(isinstance(x, int) for x in a):",
-            "            try:",
-            f"                return _lean_ffi.call_array_u32_flexible(_lib, None, {repr(c_symbol)}, list(a), _lean_bin_dir)",
-            "            except (AttributeError, NotImplementedError, RuntimeError, ValueError):",
-            "                pass",
-            f"    f = getattr(_lib, {repr(c_symbol)}, None)",
-            "    if f is None:",
-            f"        raise AttributeError({repr('Lean export not found: ' + c_symbol)})",
-            "    return f(*args, **kwargs)",
-            "",
-        ])
+        lines.extend(
+            [
+                f"def {safe_py}(*args, **kwargs):",
+                f'    """Lean export {c_symbol}; pass list[int] for Array UInt32 marshalling."""',
+                "    _lib = _get_lib()",
+                "    if _lean_ffi is not None and len(args) == 1 and not kwargs:",
+                "        a = args[0]",
+                "        if isinstance(a, (list, tuple)) and all(isinstance(x, int) for x in a):",
+                "            return _lean_ffi.call_array_u32_flexible(",
+                f"                _lib, None, {repr(c_symbol)}, list(a), _lean_bin_dir)",
+                "            )",
+                f"    f = getattr(_lib, {repr(c_symbol)}, None)",
+                "    if f is None:",
+                f"        raise AttributeError({repr('Lean export not found: ' + c_symbol)})",
+                "    return f(*args, **kwargs)",
+                "",
+            ]
+        )
     lines.append("__all__ = [" + ", ".join(repr(n) for n in names_for_all) + "]")
     text = "\n".join(lines)
     Path(output_path).write_text(text, encoding="utf-8")

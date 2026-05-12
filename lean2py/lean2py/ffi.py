@@ -17,6 +17,27 @@ LEAN_OBJECT_HEADER_SIZE = 8  # lean_object
 LEAN_ARRAY_HEADER_SIZE = LEAN_OBJECT_HEADER_SIZE + 8 + 8  # + m_size + m_capacity
 
 
+def _max_array_len() -> int:
+    raw = os.environ.get("LEAN2PY_MAX_ARRAY_LEN", "16777216")
+    try:
+        n = int(raw)
+        return max(0, min(n, 2**28))
+    except ValueError:
+        return 16777216
+
+
+def _validate_u32_list(py_list: list[int], *, ctx: str) -> None:
+    n = len(py_list)
+    cap = _max_array_len()
+    if n > cap:
+        raise ValueError(f"{ctx}: list length {n} exceeds LEAN2PY_MAX_ARRAY_LEN ({cap})")
+    for i, x in enumerate(py_list):
+        if not isinstance(x, int):
+            raise TypeError(f"{ctx}: element at index {i} is not int")
+        if x < 0 or x > 0xFFFFFFFF:
+            raise ValueError(f"{ctx}: UInt32 out of range at index {i}: {x!r}")
+
+
 def _lean_box_u32(x: int) -> int:
     """Scalar encoding: on 64-bit Lean uses tagged pointers for small scalars."""
     return ((x & 0xFFFFFFFF) << 1) | 1
@@ -58,7 +79,8 @@ def _array_u32_to_lean(
     rt: ctypes.CDLL,
     py_list: list[int],
 ) -> ctypes.c_void_p:
-    """Build a Lean Array UInt32 from a Python list. Caller must not free (passed to Lean; it consumes)."""
+    """Build a Lean ``Array UInt32`` from a Python list (ownership passes to Lean)."""
+    _validate_u32_list(py_list, ctx="Array UInt32")
     n = len(py_list)
     if n == 0:
         # Empty array: capacity 0
@@ -97,7 +119,9 @@ def _array_f64_to_lean(
     """Build a Lean Array Float from a Python list. Requires lean_box_float from runtime."""
     # Float is boxed via lean_box_float (ctor), not a tag. We need the runtime.
     # For a minimal implementation we could skip Float arrays or use a different approach.
-    raise NotImplementedError("Array Float from Python not yet implemented; use Array UInt32 or String boundary")
+    raise NotImplementedError(
+        "Array Float from Python not yet implemented; use Array UInt32 or String boundary."
+    )
 
 
 def _unbox_u32(rt: ctypes.CDLL, result_ptr: ctypes.c_void_p) -> int:
@@ -179,8 +203,15 @@ def _read_lean_array_u32(rt: ctypes.CDLL, ptr: ctypes.c_void_p) -> list[int]:
         if (val & 1) == 1:
             out.append((val >> 1) & 0xFFFFFFFF)
         else:
-            # Boxed UInt32 - skip for now
-            out.append(0)
+            dec = getattr(rt, "lean_dec_ref_cold", None)
+            if dec is not None:
+                dec.argtypes = [ctypes.c_void_p]
+                dec.restype = None
+                dec(ptr)
+            raise NotImplementedError(
+                "Array element is boxed UInt32 in Lean heap; decode not implemented. "
+                "Use only defensively-updated Array UInt32 of tagged scalars."
+            )
     dec = getattr(rt, "lean_dec_ref_cold", None)
     if dec is not None:
         dec.argtypes = [ctypes.c_void_p]
@@ -243,7 +274,10 @@ def call_array_u32_flexible(
         return _unbox_u64(rt, result)
     # Pointer -> assume array
     try:
-        return _read_lean_array_u32(rt, ctypes.c_void_p(val) if not isinstance(result, ctypes.c_void_p) else result)
+        res_ptr = (
+            ctypes.c_void_p(val) if not isinstance(result, ctypes.c_void_p) else result
+        )
+        return _read_lean_array_u32(rt, res_ptr)
     except ValueError:
         return _unbox_u64(rt, result)
 

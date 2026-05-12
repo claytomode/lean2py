@@ -14,4 +14,21 @@ dependencies = []
 lean2py = "lean2py.lean2py.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0.0"]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "lean: requires lean and lake on PATH (integration)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["lean2py", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

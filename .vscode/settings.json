@@ -1,0 +1,5 @@
+{
+  "terminal.integrated.env.windows": {
+    "PATH": "${env:USERPROFILE}\\.elan\\bin;${env:PATH}"
+  }
+}

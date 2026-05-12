@@ -1,1 +1,1 @@
-"""BigO-Gen: Lean 4 → Python bindings (lean2py)."""
+"""lean2py: Lean 4 → Python bindings."""
